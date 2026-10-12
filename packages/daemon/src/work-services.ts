@@ -11,9 +11,13 @@ export function createWorkServiceQueue(run: (args: string[]) => Promise<unknown>
   const pending = new Map<string, Promise<void>>();
   function enqueue(id: string, args: string[]) {
     const previous = pending.get(id) ?? Promise.resolve();
-    const next = previous.then(async () => { await run(args); }).catch(() => {
-      log.warn('work service operation failed; inspect the lifecycle journal');
-    });
+    const next = previous
+      .then(async () => {
+        await run(args);
+      })
+      .catch(() => {
+        log.warn('work service operation failed; inspect the lifecycle journal');
+      });
     pending.set(id, next);
     void next.then(() => {
       if (pending.get(id) === next) pending.delete(id);

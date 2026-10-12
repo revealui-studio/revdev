@@ -242,16 +242,20 @@ if (args.includes('--ensure')) {
     pidFile === DAEMON_DEFAULTS.pidFile &&
     (process.env.REVDEV_DAEMON_DATA ?? DAEMON_DEFAULTS.dataDir) === DAEMON_DEFAULTS.dataDir;
   if (process.platform === 'linux' && usesDefaultPaths) {
-    const unit = spawnSync('systemctl', [
-      '--user', 'show', 'revdev-daemon.service',
-      '--property=LoadState', '--value',
-    ], { encoding: 'utf8', timeout: 5_000 });
+    const unit = spawnSync(
+      'systemctl',
+      ['--user', 'show', 'revdev-daemon.service', '--property=LoadState', '--value'],
+      { encoding: 'utf8', timeout: 5_000 },
+    );
     if (unit.status === 0 && unit.stdout.trim() === 'loaded') {
-      const started = spawnSync('systemctl', [
-        '--user', 'start', 'revdev-daemon.service',
-      ], { stdio: 'ignore', timeout: 25_000 });
+      const started = spawnSync('systemctl', ['--user', 'start', 'revdev-daemon.service'], {
+        stdio: 'ignore',
+        timeout: 25_000,
+      });
       if (started.status !== 0) {
-        console.error('[daemon] service startup failed; inspect journalctl --user -u revdev-daemon.service');
+        console.error(
+          '[daemon] service startup failed; inspect journalctl --user -u revdev-daemon.service',
+        );
         process.exit(1);
       }
       const serviceDeadline = Date.now() + 20_000;

@@ -37,7 +37,12 @@ import { agentKeyGcHealth, runAgentKeyGc } from './agent-key-gc.js';
 import { DAEMON_DEFAULTS, type DaemonConfig } from './config.js';
 import { readRootOwnedFile } from './confinement.js';
 import { DESIGN_PACK_MOVED_EVENT, designPackEvents } from './design-pack-events.js';
-import { isDaemonBusy, notifyAgentEnded, notifyDaemonStarted, notifyDaemonStopping } from './eviction.js';
+import {
+  isDaemonBusy,
+  notifyAgentEnded,
+  notifyDaemonStarted,
+  notifyDaemonStopping,
+} from './eviction.js';
 import { GoalHarness, GoalStore } from './goals/index.js';
 import {
   guardRpcMethod,
@@ -58,8 +63,6 @@ import {
   fetchLicenseTrustSet,
   getAcceptedLicenseTrustSet,
 } from './license-authority.js';
-import { sessionWork } from './session-work.js';
-import { enterWorkServices } from './work-services.js';
 import { loopGuards, loopRpcView } from './loop-guard.js';
 import {
   getSelfDaemonId,
@@ -113,10 +116,12 @@ import {
   retentionCutoffIso,
   SNAPSHOT_RETENTION_DAYS,
 } from './session-fidelity-snapshot.js';
+import { sessionWork } from './session-work.js';
 import { migrate } from './storage/migrate.js';
 import { initToolGuard } from './tool-guard/index.js';
 import { invalidParamsResponse, validateParams } from './validation/index.js';
 import { WORK_COMPLETED_EVENT, workEvents } from './work-events.js';
+import { enterWorkServices } from './work-services.js';
 
 const log = createLogger({ service: 'revdev-daemon' });
 

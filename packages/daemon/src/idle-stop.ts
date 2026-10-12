@@ -26,9 +26,8 @@ export function createIdleStop(opts: {
   const schedule = () => {
     clear();
     if (stopped || opts.idleStopMs <= 0) return;
-    const remaining = quietSince === null
-      ? opts.idleStopMs
-      : opts.idleStopMs - (Date.now() - quietSince);
+    const remaining =
+      quietSince === null ? opts.idleStopMs : opts.idleStopMs - (Date.now() - quietSince);
     timer = setTimeout(check, Math.max(1, Math.min(1_000, remaining)));
     timer.unref?.();
   };

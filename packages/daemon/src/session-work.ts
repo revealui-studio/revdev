@@ -5,7 +5,10 @@ function processIdentity(pid: number): string | null {
   if (process.platform !== 'linux' || !Number.isSafeInteger(pid) || pid <= 0) return null;
   try {
     const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
-    const fields = stat.slice(stat.lastIndexOf(')') + 2).trim().split(/\s+/);
+    const fields = stat
+      .slice(stat.lastIndexOf(')') + 2)
+      .trim()
+      .split(/\s+/);
     if (fields[0] === 'Z' || fields[0] === 'X') return null;
     return fields[19] ?? null; // Linux stat field 22: process start time.
   } catch {
@@ -13,9 +16,7 @@ function processIdentity(pid: number): string | null {
   }
 }
 
-export function createSessionWork(
-  identity: (pid: number) => string | null = processIdentity,
-) {
+export function createSessionWork(identity: (pid: number) => string | null = processIdentity) {
   const sessions = new Map<string, { pid: number; birth: string }>();
   return {
     hold(id: string, pid: number | null) {

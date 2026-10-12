@@ -30,7 +30,7 @@ describe('local session work', () => {
   });
 
   it('does not hold missing processes and clears on shutdown', () => {
-    const work = createSessionWork((pid) => pid === 123 ? 'birth' : null);
+    const work = createSessionWork((pid) => (pid === 123 ? 'birth' : null));
     work.hold('missing', 456);
     work.hold('unknown', null);
     expect(work.isBusy()).toBe(false);

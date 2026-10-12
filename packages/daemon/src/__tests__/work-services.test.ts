@@ -4,8 +4,13 @@ import { createWorkServiceQueue } from '../work-services.js';
 describe('work service operation ordering', () => {
   it('finishes enter before leave even when a session ends immediately', async () => {
     let finish!: () => void;
-    const entering = new Promise<void>((resolve) => { finish = resolve; });
-    const run = vi.fn().mockImplementationOnce(() => entering).mockResolvedValue(undefined);
+    const entering = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const run = vi
+      .fn()
+      .mockImplementationOnce(() => entering)
+      .mockResolvedValue(undefined);
     const queue = createWorkServiceQueue(run);
     queue.enter('agent', 123, '/project');
     queue.leave('agent');
