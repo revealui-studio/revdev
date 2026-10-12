@@ -1,8 +1,6 @@
 /**
- * Stop the daemon after it has had zero clients for idleStopMs.
- * A new connection cancels the timer. idleStopMs 0 disables the timer.
- * The HTTP gateway, when enabled, counts as always busy so a published
- * gateway is not torn down between browser requests.
+ * Stop only after a continuous idle window.
+ * Recheck busy work so completion needs no socket-disconnect event.
  */
 export interface IdleStop {
   onConnect(): void;
@@ -17,36 +15,56 @@ export function createIdleStop(opts: {
   onIdle: () => void;
 }): IdleStop {
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let quietSince: number | null = null;
+  let stopped = false;
 
   const clear = () => {
-    if (timer) {
-      clearTimeout(timer);
-      timer = null;
+    if (timer !== null) clearTimeout(timer);
+    timer = null;
+  };
+
+  const schedule = () => {
+    clear();
+    if (stopped || opts.idleStopMs <= 0) return;
+    const remaining = quietSince === null
+      ? opts.idleStopMs
+      : opts.idleStopMs - (Date.now() - quietSince);
+    timer = setTimeout(check, Math.max(1, Math.min(1_000, remaining)));
+    timer.unref?.();
+  };
+
+  const check = () => {
+    timer = null;
+    if (stopped) return;
+    if (opts.isBusy()) {
+      quietSince = null;
+    } else {
+      quietSince ??= Date.now();
+      if (Date.now() - quietSince >= opts.idleStopMs) {
+        stopped = true;
+        opts.onIdle();
+        return;
+      }
     }
+    schedule();
   };
 
   const arm = () => {
-    if (!opts.idleStopMs || opts.isBusy()) {
-      clear();
-      return;
-    }
-    clear();
-    timer = setTimeout(() => {
-      timer = null;
-      if (opts.isBusy()) return;
-      opts.onIdle();
-    }, opts.idleStopMs);
-    timer.unref?.();
+    if (stopped || opts.idleStopMs <= 0) return;
+    quietSince = opts.isBusy() ? null : Date.now();
+    schedule();
   };
 
   return {
     onConnect() {
+      quietSince = null;
       clear();
     },
-    onDisconnect() {
-      arm();
-    },
+    onDisconnect: arm,
     arm,
-    stop: clear,
+    stop() {
+      stopped = true;
+      clear();
+    },
   };
 }

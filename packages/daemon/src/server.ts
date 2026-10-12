@@ -37,7 +37,7 @@ import { agentKeyGcHealth, runAgentKeyGc } from './agent-key-gc.js';
 import { DAEMON_DEFAULTS, type DaemonConfig } from './config.js';
 import { readRootOwnedFile } from './confinement.js';
 import { DESIGN_PACK_MOVED_EVENT, designPackEvents } from './design-pack-events.js';
-import { notifyAgentEnded, notifyDaemonStarted, notifyDaemonStopping } from './eviction.js';
+import { isDaemonBusy, notifyAgentEnded, notifyDaemonStarted, notifyDaemonStopping } from './eviction.js';
 import { GoalHarness, GoalStore } from './goals/index.js';
 import {
   guardRpcMethod,
@@ -58,6 +58,8 @@ import {
   fetchLicenseTrustSet,
   getAcceptedLicenseTrustSet,
 } from './license-authority.js';
+import { sessionWork } from './session-work.js';
+import { enterWorkServices } from './work-services.js';
 import { loopGuards, loopRpcView } from './loop-guard.js';
 import {
   getSelfDaemonId,
@@ -1205,6 +1207,8 @@ registerHandler('session.register', async (params, db, ctx) => {
   // catches per-check throws and always resolves, so registration can never
   // fail on a check error.
   const warnings = await runSessionChecks({ workDir, agentId: id });
+  sessionWork.hold(id, pid);
+  enterWorkServices(id, pid, workDir);
 
   // Include `session: {id}` for back-compat with hook clients that read
   // `result.session.id`. New clients should use `sessionId`/`agentId`.
@@ -3094,7 +3098,7 @@ export async function startDaemon(
   const openSockets = new Set<Socket>();
   const idleStop = createIdleStop({
     idleStopMs: cfg.httpPort > 0 ? 0 : cfg.idleStopMs,
-    isBusy: () => openSockets.size > 0 || _closing,
+    isBusy: () => openSockets.size > 0 || _activeHandlerCount > 0 || isDaemonBusy() || _closing,
     onIdle: () => {
       log.info('no clients; stopping', { idleStopMs: cfg.idleStopMs });
       process.kill(process.pid, 'SIGTERM');

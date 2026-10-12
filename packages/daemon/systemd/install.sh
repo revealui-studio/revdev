@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install the systemd-user unit for revdev-daemon and enable it on boot.
+# Install the systemd-user unit for on-demand daemon startup.
 #
 # Usage:
 #   ./packages/daemon/systemd/install.sh           # default: use repo path + PATH-resolved node
@@ -57,7 +57,8 @@ sed "s|/usr/bin/env node %h/revealfleet/revdev/packages/daemon/dist/cli.js|\"$ES
   "$TEMPLATE" > "$UNIT_DIR/revdev-daemon.service"
 
 systemctl --user daemon-reload
-systemctl --user enable --now revdev-daemon
+# Work launchers start the service when needed; installation does not.
+systemctl --user disable revdev-daemon
 
 echo
 echo "revdev-daemon installed at $UNIT_DIR/revdev-daemon.service"

@@ -68,3 +68,14 @@ export function onDaemonStopping(hook: DaemonStoppingHook): void {
 export async function notifyDaemonStopping(): Promise<void> {
   for (const hook of stoppingHooks) await hook();
 }
+
+// Background work participates in idle shutdown without importing handlers.
+const busyChecks: Array<() => boolean> = [];
+
+export function onDaemonBusy(check: () => boolean): void {
+  busyChecks.push(check);
+}
+
+export function isDaemonBusy(): boolean {
+  return busyChecks.some((check) => check());
+}
