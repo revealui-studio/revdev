@@ -1154,8 +1154,7 @@ registerHandler('session.register', async (params, db, ctx) => {
   //      the same id re-opens an ended session.
   const supplied = strOrNull(params.agentId);
   const id = supplied ?? crypto.randomUUID();
-  const generation = sessionRegistrations.begin(id);
-  try {
+  return sessionRegistrations.run(id, async (generation) => {
     const agentName = str(params.agentName, supplied ?? 'anon');
     const workDir = str(params.workDir) || str(params.task);
     const backend = str(params.backend, str(params.env, 'unknown'));
@@ -1218,8 +1217,9 @@ registerHandler('session.register', async (params, db, ctx) => {
     const warnings = await runSessionChecks({ workDir, agentId: id });
     // Persist only successfully admitted sessions, bound to the process seen
     // before asynchronous registration. Never adopt a reused PID on restart.
-    const finalized = await sessionRegistrations.finalize(db, id, generation, pid, processBirth);
-    if (finalized) enterWorkServices(id, pid, workDir);
+    await sessionRegistrations.finalize(db, id, generation, pid, processBirth, () => {
+      enterWorkServices(id, pid, workDir);
+    });
 
     // Include `session: {id}` for back-compat with hook clients that read
     // `result.session.id`. New clients should use `sessionId`/`agentId`.
@@ -1243,9 +1243,7 @@ registerHandler('session.register', async (params, db, ctx) => {
       warnings,
       session: { id, env, task: workDir },
     };
-  } finally {
-    sessionRegistrations.finish(id, generation);
-  }
+  });
 });
 
 interface IdentityResult {

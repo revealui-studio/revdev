@@ -4,14 +4,26 @@ import { sessionProcessIdentity, sessionWork } from './session-work.js';
 
 export function createSessionRegistrations() {
   const pending = new Map<string, string>();
+  const tails = new Map<string, Promise<void>>();
   return {
-    begin(id: string) {
+    async run<T>(id: string, operation: (generation: string) => Promise<T>): Promise<T> {
+      const previous = tails.get(id) ?? Promise.resolve();
+      let release!: () => void;
+      const completed = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const tail = previous.then(() => completed);
+      tails.set(id, tail);
+      await previous;
       const generation = randomUUID();
       pending.set(id, generation);
-      return generation;
-    },
-    finish(id: string, generation: string) {
-      if (pending.get(id) === generation) pending.delete(id);
+      try {
+        return await operation(generation);
+      } finally {
+        if (pending.get(id) === generation) pending.delete(id);
+        release();
+        if (tails.get(id) === tail) tails.delete(id);
+      }
     },
     async finalize(
       db: PGlite,
@@ -19,6 +31,7 @@ export function createSessionRegistrations() {
       generation: string,
       pid: number | null,
       birth: string | null,
+      onAdmitted: () => void = () => {},
     ) {
       if (pending.get(id) !== generation) return false;
       const currentBirth = sessionProcessIdentity(pid);
@@ -32,6 +45,7 @@ export function createSessionRegistrations() {
       // A newer registration may begin while the conditional write is pending.
       if (updated.rows.length === 0 || pending.get(id) !== generation) return false;
       sessionWork.hold(id, pid, admittedBirth);
+      onAdmitted();
       return true;
     },
   };
