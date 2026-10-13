@@ -32,6 +32,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.5.2",
     "@revealui/harnesses": "0.20.0",
+    "node-gyp": "12.4.0",
     "npm": "11.21.0",
     "typescript": "7.0.2",
     "vitest": "^4.1.11",
