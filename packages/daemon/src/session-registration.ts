@@ -45,7 +45,8 @@ export function createSessionRegistrations() {
       // A newer registration may begin while the conditional write is pending.
       if (updated.rows.length === 0 || pending.get(id) !== generation) return false;
       sessionWork.hold(id, pid, admittedBirth);
-      onAdmitted();
+      // Recheck after persistence before forwarding the PID to work services.
+      if (admittedBirth !== null && sessionProcessIdentity(pid) === admittedBirth) onAdmitted();
       return true;
     },
   };

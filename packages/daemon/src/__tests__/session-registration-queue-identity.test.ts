@@ -32,11 +32,17 @@ vi.mock('../session-registration.js', async (importActual) => {
   };
 });
 
+vi.mock('../work-services.js', () => ({
+  enterWorkServices: vi.fn(),
+  leaveWorkServices: vi.fn(),
+}));
+
 import { notifyDaemonStarted } from '../eviction.js';
 import { dispatchRpc, type SocketContext } from '../server.js';
 import { sessionRegistrations } from '../session-registration.js';
 import { sessionWork } from '../session-work.js';
 import { migrate } from '../storage/migrate.js';
+import { enterWorkServices } from '../work-services.js';
 
 it('the RPC handler captures process birth before the stable-ID queue wait', async () => {
   const db = new PGlite();
@@ -87,6 +93,7 @@ it('the RPC handler captures process birth before the stable-ID queue wait', asy
     await blocker;
     const response = await registration;
     expect(response).not.toHaveProperty('error');
+    expect(enterWorkServices).not.toHaveBeenCalled();
     expect(
       (await db.query('SELECT pid, process_birth FROM agent_sessions WHERE id = $1', ['queued']))
         .rows,
