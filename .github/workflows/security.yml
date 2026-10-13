@@ -81,7 +81,7 @@ jobs:
 
       # JS/TS-specific setup: install deps so CodeQL sees the full module graph.
       # Don't pin a version on pnpm/action-setup — the root package.json's
-      # `packageManager` field already specifies `pnpm@10.12.1`, and the
+      # `packageManager` field already specifies `pnpm@12.12.1`, and the
       # action errors with "Multiple versions of pnpm specified" if both
       # are set.
       - if: matrix.language == 'javascript-typescript'
