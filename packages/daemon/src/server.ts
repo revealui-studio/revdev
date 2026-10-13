@@ -116,7 +116,7 @@ import {
   retentionCutoffIso,
   SNAPSHOT_RETENTION_DAYS,
 } from './session-fidelity-snapshot.js';
-import { sessionWork } from './session-work.js';
+import { sessionProcessIdentity, sessionWork } from './session-work.js';
 import { migrate } from './storage/migrate.js';
 import { initToolGuard } from './tool-guard/index.js';
 import { invalidParamsResponse, validateParams } from './validation/index.js';
@@ -1158,6 +1158,7 @@ registerHandler('session.register', async (params, db, ctx) => {
   const backend = str(params.backend, str(params.env, 'unknown'));
   const env = `${backend}:${agentName}`;
   const pid = num(params.pid, 0) || null;
+  const processBirth = sessionProcessIdentity(pid);
   if (supplied) {
     // UPSERT: insert or re-open existing row.
     await db.query(
@@ -1167,6 +1168,7 @@ registerHandler('session.register', async (params, db, ctx) => {
          env = EXCLUDED.env,
          task = EXCLUDED.task,
          pid = EXCLUDED.pid,
+         process_birth = NULL,
          updated_at = NOW(),
          ended_at = NULL,
          exit_summary = NULL`,
@@ -1212,7 +1214,11 @@ registerHandler('session.register', async (params, db, ctx) => {
   // catches per-check throws and always resolves, so registration can never
   // fail on a check error.
   const warnings = await runSessionChecks({ workDir, agentId: id });
-  sessionWork.hold(id, pid);
+  // Persist only successfully admitted sessions, bound to the process seen
+  // before asynchronous registration. Never adopt a reused PID on restart.
+  const heldBirth = sessionWork.hold(id, pid, processBirth);
+  await db.query('UPDATE agent_sessions SET process_birth = $2 WHERE id = $1', [id, heldBirth]);
+  sessionWork.hold(id, pid, heldBirth);
   enterWorkServices(id, pid, workDir);
 
   // Include `session: {id}` for back-compat with hook clients that read

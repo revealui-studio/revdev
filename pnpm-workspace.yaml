@@ -1,3 +1,32 @@
 packages:
   - "apps/*"
   - "packages/*"
+
+# Preserve the workspace security and compatibility overrides.
+overrides:
+  "@biomejs/biome": "2.5.2"
+  "esbuild": ">=0.28.1"
+  "undici": ">=7.29.1 <8"
+  "vite": "8.2.0"
+  "fast-uri": ">=3.1.6 <4"
+  "hono": "4.13.8"
+  "ip-address": ">=10.7.1"
+  "postcss": "8.5.25"
+  "qs": ">=6.16.0"
+  "nanoid@<3.3.18": "3.3.18"
+  "vitest": ">=4.1.11 <5"
+  "@vitest/mocker": ">=4.1.11 <5"
+  "ws@8": ">=8.20.1"
+  "@hono/node-server": ">=2.0.5"
+  "body-parser": ">=2.3.0"
+  "typescript": "7.0.2"
+  "@revealui/ts-strada": "npm:typescript@6.0.3"
+
+# Unreviewed dependency lifecycle scripts fail installation.
+strictDepBuilds: true
+allowBuilds:
+  "node-pty@1.1.0": true
+  "esbuild@0.28.1": false
+
+# Validation must not trigger an implicit dependency installation.
+verifyDepsBeforeRun: error

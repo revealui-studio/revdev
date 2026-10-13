@@ -39,3 +39,12 @@ describe('local session work', () => {
     expect(work.isBusy()).toBe(false);
   });
 });
+
+it('rejects a PID reused while registration is pending', () => {
+  let birth = 'boot:original';
+  const work = createSessionWork(() => birth);
+  const captured = birth;
+  birth = 'boot:replacement';
+  expect(work.hold('registration', 123, captured)).toBeNull();
+  expect(work.isBusy()).toBe(false);
+});
