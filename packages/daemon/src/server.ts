@@ -1154,13 +1154,14 @@ registerHandler('session.register', async (params, db, ctx) => {
   //      the same id re-opens an ended session.
   const supplied = strOrNull(params.agentId);
   const id = supplied ?? crypto.randomUUID();
+  // Bind the caller process before any registration queue wait.
+  const pid = num(params.pid, 0) || null;
+  const processBirth = sessionProcessIdentity(pid);
   return sessionRegistrations.run(id, async (generation) => {
     const agentName = str(params.agentName, supplied ?? 'anon');
     const workDir = str(params.workDir) || str(params.task);
     const backend = str(params.backend, str(params.env, 'unknown'));
     const env = `${backend}:${agentName}`;
-    const pid = num(params.pid, 0) || null;
-    const processBirth = sessionProcessIdentity(pid);
     if (supplied) {
       // UPSERT: insert or re-open existing row.
       await db.query(
