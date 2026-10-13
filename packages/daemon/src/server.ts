@@ -116,7 +116,8 @@ import {
   retentionCutoffIso,
   SNAPSHOT_RETENTION_DAYS,
 } from './session-fidelity-snapshot.js';
-import { sessionProcessIdentity, sessionWork } from './session-work.js';
+import { sessionRegistrations } from './session-registration.js';
+import { sessionProcessIdentity } from './session-work.js';
 import { migrate } from './storage/migrate.js';
 import { initToolGuard } from './tool-guard/index.js';
 import { invalidParamsResponse, validateParams } from './validation/index.js';
@@ -1153,96 +1154,98 @@ registerHandler('session.register', async (params, db, ctx) => {
   //      the same id re-opens an ended session.
   const supplied = strOrNull(params.agentId);
   const id = supplied ?? crypto.randomUUID();
-  const agentName = str(params.agentName, supplied ?? 'anon');
-  const workDir = str(params.workDir) || str(params.task);
-  const backend = str(params.backend, str(params.env, 'unknown'));
-  const env = `${backend}:${agentName}`;
-  const pid = num(params.pid, 0) || null;
-  const processBirth = sessionProcessIdentity(pid);
-  if (supplied) {
-    // UPSERT: insert or re-open existing row.
-    await db.query(
-      `INSERT INTO agent_sessions (id, env, task, pid)
-         VALUES ($1, $2, $3, $4)
+  const generation = sessionRegistrations.begin(id);
+  try {
+    const agentName = str(params.agentName, supplied ?? 'anon');
+    const workDir = str(params.workDir) || str(params.task);
+    const backend = str(params.backend, str(params.env, 'unknown'));
+    const env = `${backend}:${agentName}`;
+    const pid = num(params.pid, 0) || null;
+    const processBirth = sessionProcessIdentity(pid);
+    if (supplied) {
+      // UPSERT: insert or re-open existing row.
+      await db.query(
+        `INSERT INTO agent_sessions (id, env, task, pid, registration_generation)
+         VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (id) DO UPDATE SET
          env = EXCLUDED.env,
          task = EXCLUDED.task,
          pid = EXCLUDED.pid,
          process_birth = NULL,
+         registration_generation = EXCLUDED.registration_generation,
          updated_at = NOW(),
          ended_at = NULL,
          exit_summary = NULL`,
-      [id, env, workDir, pid],
-    );
-  } else {
-    await db.query(`INSERT INTO agent_sessions (id, env, task, pid) VALUES ($1, $2, $3, $4)`, [
-      id,
-      env,
-      workDir,
-      pid,
-    ]);
+        [id, env, workDir, pid, generation],
+      );
+    } else {
+      await db.query(
+        `INSERT INTO agent_sessions (id, env, task, pid, registration_generation) VALUES ($1, $2, $3, $4, $5)`,
+        [id, env, workDir, pid, generation],
+      );
+    }
+
+    // Bind this identity to the connection.
+    ctx.agentId = id;
+    ctx.agentName = agentName;
+    ctx.boundVia = 'register';
+
+    // Best-effort dual-write to Neon. Failures are logged inside the helper;
+    // the RPC succeeds based on the PGlite write above. See GAP-154 §E /
+    // Phase 1 decision #5 ("dual-write failure: best-effort, don't fail RPC").
+    await syncSessionRegister({ agentId: id, agentName, env, task: workDir, pid });
+
+    // Agent identity. Two ownership models:
+    //   - CLIENT-OWNED (Studio zero-9P): the caller supplies `publicKeyPem` and
+    //     keeps the private key in its own (Windows-local) vault. The daemon
+    //     registers only the public half and never holds a private key. This is
+    //     the real barrier behind the relay — a host process without the key
+    //     cannot sign a mutation/content read (see MUTATING_OR_CONTENT_METHODS).
+    //   - DAEMON-MINTED (headless hooks): no key supplied, so the daemon
+    //     generates the keypair and returns it once in the register response.
+    //     No vault mirror (GAP-409 D1) — the one-shot response and the
+    //     client's local cache are the only key holders.
+    const clientPublicKeyPem = strOrNull(params.publicKeyPem);
+    const identity = clientPublicKeyPem
+      ? await registerClientIdentity(db, id, clientPublicKeyPem)
+      : await bootstrapAgentIdentity(db, id);
+    const { did, publicKeyPem } = identity;
+
+    // Run the registered session-lifecycle advisory checks and surface their
+    // warnings to the client. Best-effort by construction: runSessionChecks
+    // catches per-check throws and always resolves, so registration can never
+    // fail on a check error.
+    const warnings = await runSessionChecks({ workDir, agentId: id });
+    // Persist only successfully admitted sessions, bound to the process seen
+    // before asynchronous registration. Never adopt a reused PID on restart.
+    const finalized = await sessionRegistrations.finalize(db, id, generation, pid, processBirth);
+    if (finalized) enterWorkServices(id, pid, workDir);
+
+    // Include `session: {id}` for back-compat with hook clients that read
+    // `result.session.id`. New clients should use `sessionId`/`agentId`.
+    //
+    // `privateKeyPem` is returned ONLY on first daemon-minted bootstrap so
+    // headless harness clients can cache a signing key for session.end and
+    // other MUTATING_OR_CONTENT_METHODS. Consumers include Claude Code hooks,
+    // Grok dual-harness hooks, Ubuntu Inference Snap / Ollama agents registered
+    // from Studio, and the MCP bridge — not Claude/Grok alone. Client-owned
+    // enroll never returns a private key (Studio UI keeps it). Re-register of
+    // an existing identity never re-emits the private key — clients load it
+    // from their local cache (there is no vault mirror; GAP-409 D1-D3).
+    return {
+      sessionId: id,
+      agentId: id,
+      agentName,
+      backend,
+      did,
+      publicKeyPem,
+      ...(identity.privateKeyPem !== undefined ? { privateKeyPem: identity.privateKeyPem } : {}),
+      warnings,
+      session: { id, env, task: workDir },
+    };
+  } finally {
+    sessionRegistrations.finish(id, generation);
   }
-
-  // Bind this identity to the connection.
-  ctx.agentId = id;
-  ctx.agentName = agentName;
-  ctx.boundVia = 'register';
-
-  // Best-effort dual-write to Neon. Failures are logged inside the helper;
-  // the RPC succeeds based on the PGlite write above. See GAP-154 §E /
-  // Phase 1 decision #5 ("dual-write failure: best-effort, don't fail RPC").
-  await syncSessionRegister({ agentId: id, agentName, env, task: workDir, pid });
-
-  // Agent identity. Two ownership models:
-  //   - CLIENT-OWNED (Studio zero-9P): the caller supplies `publicKeyPem` and
-  //     keeps the private key in its own (Windows-local) vault. The daemon
-  //     registers only the public half and never holds a private key. This is
-  //     the real barrier behind the relay — a host process without the key
-  //     cannot sign a mutation/content read (see MUTATING_OR_CONTENT_METHODS).
-  //   - DAEMON-MINTED (headless hooks): no key supplied, so the daemon
-  //     generates the keypair and returns it once in the register response.
-  //     No vault mirror (GAP-409 D1) — the one-shot response and the
-  //     client's local cache are the only key holders.
-  const clientPublicKeyPem = strOrNull(params.publicKeyPem);
-  const identity = clientPublicKeyPem
-    ? await registerClientIdentity(db, id, clientPublicKeyPem)
-    : await bootstrapAgentIdentity(db, id);
-  const { did, publicKeyPem } = identity;
-
-  // Run the registered session-lifecycle advisory checks and surface their
-  // warnings to the client. Best-effort by construction: runSessionChecks
-  // catches per-check throws and always resolves, so registration can never
-  // fail on a check error.
-  const warnings = await runSessionChecks({ workDir, agentId: id });
-  // Persist only successfully admitted sessions, bound to the process seen
-  // before asynchronous registration. Never adopt a reused PID on restart.
-  const heldBirth = sessionWork.hold(id, pid, processBirth);
-  await db.query('UPDATE agent_sessions SET process_birth = $2 WHERE id = $1', [id, heldBirth]);
-  sessionWork.hold(id, pid, heldBirth);
-  enterWorkServices(id, pid, workDir);
-
-  // Include `session: {id}` for back-compat with hook clients that read
-  // `result.session.id`. New clients should use `sessionId`/`agentId`.
-  //
-  // `privateKeyPem` is returned ONLY on first daemon-minted bootstrap so
-  // headless harness clients can cache a signing key for session.end and
-  // other MUTATING_OR_CONTENT_METHODS. Consumers include Claude Code hooks,
-  // Grok dual-harness hooks, Ubuntu Inference Snap / Ollama agents registered
-  // from Studio, and the MCP bridge — not Claude/Grok alone. Client-owned
-  // enroll never returns a private key (Studio UI keeps it). Re-register of
-  // an existing identity never re-emits the private key — clients load it
-  // from their local cache (there is no vault mirror; GAP-409 D1-D3).
-  return {
-    sessionId: id,
-    agentId: id,
-    agentName,
-    backend,
-    did,
-    publicKeyPem,
-    ...(identity.privateKeyPem !== undefined ? { privateKeyPem: identity.privateKeyPem } : {}),
-    warnings,
-    session: { id, env, task: workDir },
-  };
 });
 
 interface IdentityResult {

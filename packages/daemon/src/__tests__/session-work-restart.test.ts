@@ -33,8 +33,8 @@ it.skipIf(process.platform !== 'linux')(
         process.pid,
       ]);
       const migration = await migrate(db);
-      expect(migration.applied).toEqual([17]);
-      expect(await migrate(db)).toEqual({ current: 17, applied: [] });
+      expect(migration.applied).toEqual([17, 18]);
+      expect(await migrate(db)).toEqual({ current: 18, applied: [] });
       expect((await db.query('SELECT id, process_birth FROM agent_sessions')).rows).toEqual([
         { id: 'legacy', process_birth: null },
       ]);
@@ -60,7 +60,7 @@ it.skipIf(process.platform !== 'linux')(
       expect(isDaemonBusy()).toBe(false);
       await db.close();
       db = new PGlite(directory);
-      expect((await migrationStatus(db)).current).toBe(17);
+      expect((await migrationStatus(db)).current).toBe(18);
       await notifyDaemonStarted(db);
       expect(isDaemonBusy()).toBe(true);
       await db.query('UPDATE agent_sessions SET ended_at = NOW() WHERE id = $1', ['live']);
