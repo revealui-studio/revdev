@@ -18,7 +18,7 @@
  *   REVDEV_DAEMON_SHUTDOWN_GRACE_MS  # Max wait for in-flight handlers in close() (default: 5_000 = 5 s)
  */
 
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { openSync, readFileSync } from 'node:fs';
 import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import { connect } from 'node:net';
@@ -234,6 +234,41 @@ if (args.includes('--ensure')) {
     }
   } catch {
     await unlink(socketPath).catch(() => {});
+  }
+  // Use the installed service for the default daemon. Its drop-ins own
+  // credential provisioning; detached startup must not bypass them.
+  const usesDefaultPaths =
+    socketPath === DAEMON_DEFAULTS.socketPath &&
+    pidFile === DAEMON_DEFAULTS.pidFile &&
+    (process.env.REVDEV_DAEMON_DATA ?? DAEMON_DEFAULTS.dataDir) === DAEMON_DEFAULTS.dataDir;
+  if (process.platform === 'linux' && usesDefaultPaths) {
+    const unit = spawnSync(
+      'systemctl',
+      ['--user', 'show', 'revdev-daemon.service', '--property=LoadState', '--value'],
+      { encoding: 'utf8', timeout: 5_000 },
+    );
+    if (unit.status === 0 && unit.stdout.trim() === 'loaded') {
+      const started = spawnSync('systemctl', ['--user', 'start', 'revdev-daemon.service'], {
+        stdio: 'ignore',
+        timeout: 25_000,
+      });
+      if (started.status !== 0) {
+        console.error(
+          '[daemon] service startup failed; inspect journalctl --user -u revdev-daemon.service',
+        );
+        process.exit(1);
+      }
+      const serviceDeadline = Date.now() + 20_000;
+      while (Date.now() < serviceDeadline) {
+        if (await pingSocket(socketPath)) {
+          console.log('revdev-daemon service ready');
+          process.exit(0);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+      console.error('[daemon] service did not become ready; inspect its journal');
+      process.exit(1);
+    }
   }
   const entryScript = process.argv[1];
   if (!entryScript) {

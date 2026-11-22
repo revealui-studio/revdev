@@ -2,6 +2,8 @@
 Description=RevDev coordination daemon
 Documentation=https://github.com/revealui-studio/revdev
 After=network-online.target
+StartLimitIntervalSec=120
+StartLimitBurst=3
 
 [Service]
 # Adjust the path if @revdev/daemon is installed somewhere other than the
@@ -10,7 +12,11 @@ After=network-online.target
 # the contributor case.
 ExecStart=/usr/bin/env node %h/revealfleet/revdev/packages/daemon/dist/cli.js
 Restart=on-failure
-RestartSec=2
+RestartSec=10
+TimeoutStopSec=30
+KillSignal=SIGTERM
+KillMode=mixed
+UMask=0077
 # WSL note: `loginctl enable-linger $(whoami)` is required for the service
 # to keep running across logouts. Without lingering, systemd-user units
 # stop when the user's last session exits.

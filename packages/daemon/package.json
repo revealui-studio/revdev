@@ -46,6 +46,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "test": "vitest run --passWithNoTests",
+    "test:session-work-restart": "node --import tsx scripts/check-session-work-restart.mjs",
     "test:e2e": "vitest run --testPathPattern=e2e",
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit && tsc --project tsconfig.scripts.json"

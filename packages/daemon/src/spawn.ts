@@ -42,7 +42,7 @@ import {
   resolveConfinementBackend,
   resolveOperatorHome,
 } from './confinement.js';
-import { onAgentEnded, onDaemonStarted } from './eviction.js';
+import { onAgentEnded, onDaemonBusy, onDaemonStarted } from './eviction.js';
 import { requireRootAndDir } from './filegit.js';
 import { getDaemonConfig, registerHandler, type SocketContext } from './server.js';
 import { agentEvents, issueStreamTicket } from './spawn-events.js';
@@ -140,6 +140,7 @@ async function mintSpawnedAgentIdentity(
  * row with no matching registry entry as unreachable after a restart.
  */
 const registry = new Map<string, ProcessEntry>();
+onDaemonBusy(() => registry.size > 0);
 
 // ---------------------------------------------------------------------------
 // Helpers
