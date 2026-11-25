@@ -23,6 +23,7 @@ overrides:
   "@revealui/ts-strada": "npm:typescript@6.0.3"
 
 # Unreviewed dependency lifecycle scripts fail installation.
+engineStrict: true
 strictDepBuilds: true
 allowBuilds:
   "node-pty@1.1.0": true

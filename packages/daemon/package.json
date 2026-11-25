@@ -49,7 +49,10 @@
     "test:session-work-restart": "node --import tsx scripts/check-session-work-restart.mjs",
     "test:e2e": "vitest run --testPathPattern=e2e",
     "test:coverage": "vitest run --coverage",
-    "typecheck": "tsc --noEmit && tsc --project tsconfig.scripts.json"
+    "typecheck": "tsc --noEmit && tsc --project tsconfig.scripts.json",
+    "build:runtime": "node runtime-artifact.mjs",
+    "test:runtime-artifact": "node --test runtime-artifact.node-test.mjs",
+    "test:runtime-native": "node --test runtime-native.node-test.mjs"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.4",
@@ -62,7 +65,8 @@
     "drizzle-orm": "^0.45.2",
     "node-pty": "^1.0.0",
     "undici": ">=7.29.1 <8",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "@revealui/ai": "1.2.3"
   },
   "devDependencies": {
     "@types/node": "^25.9.4",

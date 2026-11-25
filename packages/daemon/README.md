@@ -162,3 +162,35 @@ package's README). Call them only when the daemon socket is reachable.
 - `src/guard.ts`. License tier check at RPC dispatch time.
 - `systemd/revdev-daemon.service`. Systemd-user unit template.
 - `systemd/install.sh`. Installer that resolves the unit's exec path and enables it.
+
+## Native runtime candidates
+
+`pnpm --filter @revdev/daemon build:runtime --output NEW_DIRECTORY BROKER_SOURCE
+ENGINE_SHA256 NODE_SHA256 PNPM_EXECUTABLE PNPM_SHA256` builds a candidate with
+the reviewed Linux x64 Node 26.13.1 / ABI147 profile. First run the normal frozen
+workspace install and build the protocol and daemon. The bundler emits its
+metafile so the producer can bind source inputs and named external imports.
+The AI runtime is a direct pinned production dependency, including its computed
+subpath imports.
+
+The producer binds Node, PNPM, broker source, manifests, lockfile, compiler
+packages and edges, native tools, headers and generated compiler shim before
+strict offline frozen deployment. It refuses unexpected build approvals,
+ambient compiler/startup overrides, tool shadows, input drift, missing native
+assets and imports outside the candidate. Incomplete output is retained without
+an acceptance manifest; do not replace or clean it to hide a failed build.
+
+`pnpm --filter @revdev/daemon test:runtime-artifact` exercises candidate/refusal
+contracts. `pnpm --filter @revdev/daemon test:runtime-native` loads the actual
+`node-pty` addon and runs noninteractive `/usr/bin/printf` on the exact reviewed
+runtime. The dedicated Node26 CI job runs both and builds the daemon. Existing
+Node24 source-test coverage remains separate.
+
+A candidate manifest leaves `custodyAccepted` and
+`completeRuntimeClosureAccepted` false. Native execution in the build workspace
+is evidence for the ABI, not acceptance of the complete deployed service.
+Production requires reviewed ELF/asset and computed-import closure, maintained
+RevKit immutable custody, the fixed operator launcher compare-and-swap and its
+inverse, and host/service/database acceptance. Do not edit an installed artifact
+or point a privileged unit at a user-writable Node installation. This command
+installs no service and grants no activation authority.
