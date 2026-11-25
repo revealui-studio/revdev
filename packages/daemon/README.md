@@ -194,3 +194,11 @@ RevKit immutable custody, the fixed operator launcher compare-and-swap and its
 inverse, and host/service/database acceptance. Do not edit an installed artifact
 or point a privileged unit at a user-writable Node installation. This command
 installs no service and grants no activation authority.
+
+For an incompletely populated metadata cache, pass `--prepare-store` before
+`--output`. The producer derives bounded exact registry package versions from
+the already verified runtime manifests and uses PNPM's normal `store add`
+command, then rechecks source and compiler inputs before the unchanged offline
+frozen deployment. Preparation does not modify project manifests, regenerate a
+lockfile, approve scripts, or relax the store/engine policy. Network/policy
+failure leaves no accepted artifact. See the maintained [PNPM store command](https://github.com/pnpm/pnpm/blob/main/pnpm/docs/cli/store.md).

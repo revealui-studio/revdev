@@ -412,7 +412,7 @@ export function nativeBuildInputs({ workspace, node, pnpm, pnpmCall, inventory, 
 }
 
 export function produceRuntimeArtifact(
-  { output, broker, engineSha256, nodeSha256, pnpm, pnpmSha256 },
+  { output, broker, engineSha256, nodeSha256, pnpm, pnpmSha256, prepareStore = false },
   run = spawnSync,
   context = { packageRoot, workspace },
 ) {
@@ -487,6 +487,53 @@ export function produceRuntimeArtifact(
     inventory: captureInventory,
     profile: context.nativeProfile,
   });
+  let storePreparation = null;
+  if (prepareStore) {
+    const specs = new Set();
+    const allowed = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._';
+    for (const root of Object.keys(nativeInputs.runtimeManifests)) {
+      if (root === join(workspace, 'packages/protocol')) continue;
+      const manifest = JSON.parse(readFileSync(join(root, 'package.json')));
+      const { name, version } = manifest;
+      require(typeof name === 'string' &&
+        typeof version === 'string' &&
+        name.length <= 214 &&
+        version.length <= 128, 'invalid store package identity');
+      const parts = name.startsWith('@') ? name.slice(1).split('/') : [name];
+      require(parts.length === (name.startsWith('@') ? 2 : 1) &&
+        parts.every(
+          (part) =>
+            part.length > 0 &&
+            !part.startsWith('.') &&
+            !part.startsWith('-') &&
+            [...part].every((char) => allowed.includes(char)),
+        ) &&
+        '0123456789'.includes(version[0]) &&
+        [...version].every((char) =>
+          `${allowed}+`.includes(char),
+        ), 'nonregistry store package refused');
+      specs.add(`${name}@${version}`);
+    }
+    const packages = [...specs].sort();
+    require(packages.length > 0 && packages.length <= 512, 'invalid store preparation bounds');
+    // PNPM owns cache population. No metadata files or project settings are edited.
+    const log = pnpmCall(['store', 'add', '--', ...packages]);
+    storePreparation = { packages, logSha256: createHash('sha256').update(log).digest('hex') };
+    for (const [name, before] of Object.entries(pins))
+      require(fileDigest(join(workspace, name)) ===
+        before, 'source changed during store preparation');
+    require(JSON.stringify(nativeInputs) ===
+      JSON.stringify(
+        nativeBuildInputs({
+          workspace,
+          node,
+          pnpm,
+          pnpmCall,
+          inventory: captureInventory,
+          profile: context.nativeProfile,
+        }),
+      ), 'native build inputs changed during store preparation');
+  }
   // Normal strict-policy deployment can restore cache or execute approved native lifecycle.
   // PNPM exec supplies the existing verified workspace compiler through its normal bin semantics.
   // A failure retains incomplete output without an acceptance manifest; never force/clean/retry.
@@ -591,6 +638,7 @@ export function produceRuntimeArtifact(
     ), 'native build inputs changed');
   const result = {
     nativeBuildInputs: nativeInputs,
+    storePreparation,
     deploymentLogSha256: fileDigest(join(output, 'deployment.log')),
     nativeLifecycle: 'normal PNPM strict-policy deploy; approved scripts permitted',
     schema: 1,
@@ -629,11 +677,14 @@ export function produceRuntimeArtifact(
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const args = process.argv.slice(2);
+    const prepareStore = args[0] === '--prepare-store';
+    if (prepareStore) args.shift();
     require(args.length === 7 &&
       args[0] ===
-        '--output', 'Usage: build:runtime --output NEW_DIRECTORY REVIEWED_BROKER_SOURCE ENGINE_SHA256 NODE_SHA256 PNPM_EXECUTABLE PNPM_SHA256');
+        '--output', 'Usage: build:runtime [--prepare-store] --output NEW_DIRECTORY REVIEWED_BROKER_SOURCE ENGINE_SHA256 NODE_SHA256 PNPM_EXECUTABLE PNPM_SHA256');
     const result = produceRuntimeArtifact({
       output: args[1],
+      prepareStore,
       broker: args[2],
       engineSha256: args[3],
       nodeSha256: args[4],

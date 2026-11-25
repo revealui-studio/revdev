@@ -203,6 +203,7 @@ function fixture(t) {
           files: { 'bin/node': { sha256: options.nodeSha256 } },
         }),
       };
+    if (args[0] === 'store') return { status: 0, stdout: 'prepared locked metadata' };
     if (args[0] === '--version') return { status: 0, stdout: '12.12.1\n' };
     if (args.includes('deploy')) {
       const deployed = args.at(-1);
@@ -634,4 +635,55 @@ test('native profile accepts only reviewed Linux x64 Node 26.13.1 ABI 147', () =
       () => assertNativeRuntime({ ...reviewed, ...delta }),
       /unreviewed native Node ABI/,
     );
+});
+
+test('explicit store preparation uses exact registry versions before offline deployment', (t) => {
+  const f = fixture(t);
+  const result = produceRuntimeArtifact({ ...f.options, prepareStore: true }, f.run, f.context);
+  const store = f.calls.findIndex(([, args]) => args.includes('store'));
+  const deploy = f.calls.findIndex(([, args]) => args.includes('deploy'));
+  assert.ok(store >= 0 && store < deploy);
+  assert.deepEqual(f.calls[store][1].slice(-4), ['store', 'add', '--', 'native-fixture-dep@1.0.0']);
+  assert.deepEqual(result.storePreparation.packages, ['native-fixture-dep@1.0.0']);
+  assert.equal(result.custodyAccepted, false);
+});
+
+test('store preparation failure or source drift refuses before output creation', (t) => {
+  for (const drift of [false, true]) {
+    const f = fixture(t);
+    const run = (executable, args, config) => {
+      if (args.includes('store')) {
+        if (!drift) return { status: 1, stderr: 'registry unavailable' };
+        const path = join(f.workspace, 'package.json');
+        writeFileSync(path, `${readFileSync(path, 'utf8')} `);
+      }
+      return f.run(executable, args, config);
+    };
+    assert.throws(
+      () => produceRuntimeArtifact({ ...f.options, prepareStore: true }, run, f.context),
+      drift ? /source changed during store preparation/ : /command failed/,
+    );
+    assert.equal(existsSync(f.options.output), false);
+    assert.equal(
+      f.calls.some(([, args]) => args.includes('deploy')),
+      false,
+    );
+  }
+});
+
+test('store preparation rejects nonregistry package identities', (t) => {
+  const f = fixture(t);
+  const path = join(f.depRoot, 'package.json');
+  const manifest = JSON.parse(readFileSync(path));
+  manifest.name = 'file:/outside';
+  writeFileSync(path, JSON.stringify(manifest));
+  assert.throws(
+    () => produceRuntimeArtifact({ ...f.options, prepareStore: true }, f.run, f.context),
+    /nonregistry store package/,
+  );
+  assert.equal(
+    f.calls.some(([, args]) => args.includes('store')),
+    false,
+  );
+  assert.equal(existsSync(f.options.output), false);
 });
