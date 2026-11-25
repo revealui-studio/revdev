@@ -101,6 +101,7 @@ function fixture(t) {
     write(join(root, 'node_version.h'), 'reviewed fixture headers');
   write(nativeProfile.installVersion, '11\n');
   const policy = {
+    engineStrict: true,
     strictDepBuilds: true,
     allowBuilds: { 'node-pty@1.1.0': true, 'esbuild@0.28.1': false },
   };
@@ -354,6 +355,24 @@ test('named resolution into mutable outside tree refuses before manifest', (t) =
 
 test('native prerequisite failures refuse before creating output or deploying', (t) => {
   const cases = [
+    [
+      'disabled engine checks',
+      (f) => {
+        f.policy.engineStrict = false;
+      },
+    ],
+    [
+      'unbounded build approval',
+      (f) => {
+        f.policy.dangerouslyAllowAllBuilds = true;
+      },
+    ],
+    [
+      'external included config',
+      (f) => {
+        f.policy.include = ['outside.yaml'];
+      },
+    ],
     [
       'missing strict policy',
       (f) => {

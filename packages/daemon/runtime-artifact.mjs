@@ -162,6 +162,8 @@ export function nativeBuildInputs({ workspace, node, pnpm, pnpmCall, inventory, 
     ].map((name) => `/usr/bin/${name}`),
   };
   assertNativeRuntime();
+  require(JSON.parse(pnpmCall(['config', 'get', 'engineStrict', '--json'])) ===
+    true, 'strict dependency engines required');
   require(JSON.parse(pnpmCall(['config', 'get', 'strictDepBuilds', '--json'])) ===
     true, 'strict native build approval required');
   const approvals = JSON.parse(pnpmCall(['config', 'get', 'allowBuilds', '--json']));
@@ -170,6 +172,8 @@ export function nativeBuildInputs({ workspace, node, pnpm, pnpmCall, inventory, 
     approvals['node-pty@1.1.0'] === true &&
     approvals['esbuild@0.28.1'] === false, 'unexpected native build approvals');
   for (const key of [
+    'dangerouslyAllowAllBuilds',
+    'include',
     'pnpmfile',
     'globalPnpmfile',
     'configDependencies',
@@ -279,8 +283,13 @@ export function nativeBuildInputs({ workspace, node, pnpm, pnpmCall, inventory, 
     shimMode & 0o111 &&
     !(shimMode & 0o7022), 'compiler shim must be executable');
   accessSync(shim, constants.X_OK);
-  require(fileDigest(shim) ===
-    '2f5ff9378824a7fb43cbd0b0b68177afdd0b4ea8addf412fdaddd0335d3a046e', 'unreviewed generated compiler shim');
+  // Both reviewed PNPM generators target the same locked compiler. A normal
+  // manager transition can retain the newer shim on an up-to-date install.
+  const compilerShims = new Set([
+    '2f5ff9378824a7fb43cbd0b0b68177afdd0b4ea8addf412fdaddd0335d3a046e',
+    '5ea2fb8a02c06f45773c0e1e6b03aa2790d920f1d0619f0315c693fcbd0644da',
+  ]);
+  require(compilerShims.has(fileDigest(shim)), 'unreviewed generated compiler shim');
   const target = shimBytes.match(/^# cmd-shim-target=(.+)$/m)?.[1];
   require(target &&
     realpathSync(resolve(bin, target)) ===
@@ -411,7 +420,7 @@ export function produceRuntimeArtifact(
   for (const key of Object.keys(process.env))
     require(!/^(NODE_OPTIONS|NODE_PATH|BASH_ENV|ENV|LD_PRELOAD|LD_LIBRARY_PATH|PYTHONPATH|PYTHONHOME|CC|CXX|CFLAGS|CXXFLAGS|LDFLAGS|npm_config_(?:node_gyp|target|arch|nodedir|devdir|dist_?url|tarball|python|ensure|script_shell|userconfig|globalconfig)|npm_package_config_node_gyp.*)$/i.test(
       key,
-    ), 'ambient native build override refused');
+    ), `ambient native build override refused: ${key}`);
   for (const value of [engineSha256, nodeSha256, pnpmSha256])
     require(/^[a-f0-9]{64}$/.test(value), 'invalid reviewed digest');
   require(isAbsolute(output) &&
