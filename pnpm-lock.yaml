@@ -367,6 +367,9 @@ importers:
       '@revdev/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@revealui/ai':
+        specifier: 1.2.3
+        version: 1.2.3(@electric-sql/pglite@0.5.4)(drizzle-orm@0.45.2(@electric-sql/pglite@0.5.4)(@neondatabase/serverless@1.1.0)(pg@8.22.0))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@7.0.2)
       '@revealui/core':
         specifier: ^0.15.4
         version: 0.15.4(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@7.0.2)
@@ -4381,7 +4384,6 @@ snapshots:
       - sql.js
       - sqlite3
       - typescript
-    optional: true
 
   '@revealui/config@0.6.0':
     dependencies:

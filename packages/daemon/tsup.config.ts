@@ -11,6 +11,7 @@ export default defineConfig({
   format: ['esm'],
   dts: false,
   clean: true,
+  metafile: true,
   target: 'node24',
   banner: { js: '' },
   external: [

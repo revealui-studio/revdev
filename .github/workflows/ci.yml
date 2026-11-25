@@ -45,6 +45,25 @@ jobs:
         run: node scripts/check-biome-version.mjs
       - run: pnpm lint
 
+  native-runtime:
+    name: Native runtime (Node 26.13.1 ABI 147)
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 26.13.1
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @revdev/protocol build
+      - run: pnpm --filter @revdev/daemon build
+      - run: pnpm --filter @revdev/daemon test:runtime-artifact
+      - run: pnpm --filter @revdev/daemon test:runtime-native
+
   typecheck:
     name: Typecheck
     runs-on: ubuntu-latest
